@@ -21,12 +21,7 @@
 4. **`balance_classes.py` (Chronological 80/20 Split & Training-Fold SMOTE):** Enforces a strict chronological 80/20 split across the full multi-million-row timeline (`Jan–Oct 2024` Train vs. `Oct–Dec 2024` Untouched Test = **1M+ real test flights**) and applies `SMOTE` synthetic oversampling exclusively on the training partition.
 5. **`train_models.py` (Scalable Ensemble Training):** Trains cross-validated Logistic Regression, Random Forest (100 Trees), Histogram Gradient Boosting, and Tuned Histogram XGBoost (`tree_method='hist'`) classifiers (`DEP_DEL15` $\ge$ 15 min), plus a secondary continuous XGBoost Delay Regressor (minutes).
 6. **`evaluate.py` (1M+ Row Evaluation & Threshold Tuning):** Scores all classifiers across the **entire 1,000,000+ row untouched chronological test partition**, calibrates operational recall-prioritized thresholds on a held-out training validation slice, and exports evaluation plots to `outputs/plots/`.
-7. **`app.py` (Interactive Live Serving & BI Console):** Launches the Streamlit Airline Operations Control Center (AOCC) & Business Intelligence demonstration suite featuring:
-   - **1-Click Live Presentation Case Studies:** Five pre-configured aviation scenarios (*Nominal Morning VFR*, *>25 kt Crosswind Cliff*, *Winter Blizzard & De-icing*, *SFO Marine Fog*, and *Clear-Sky Evening Hub Cascade*) + **Guided Viva Walkthrough Mode**.
-   - **Explainable AI (XAI) & What-If Labs:** Telescoping probability attribution waterfall, 24-hour *"Best Time to Fly"* schedule sweep optimizer, and live non-linear wind sensitivity comparison (*XGBoost vs. Random Forest vs. Logistic Regression*).
-   - **Business Intelligence KPIs:** Real-time direct block-delay cost estimation (`$101.18/min` A4A benchmark), connecting passenger misconnect exposure, and T-2h proactive dispatch savings.
-   - **National Hub-and-Spoke Radar & Custom Batch CSV Scorer:** Interactive 19-spoke U.S. risk map plus custom CSV schedule upload & scoring.
-   - **Live Relational SQL Warehouse Playground:** Editable read-only SQL lab joining `bts_flights`, `noaa_weather_hourly`, `airports_metadata`, and `airlines_metadata` directly in the browser.
+7. **`server.py` & `web/index.html` (Minimalist SKY / MOVE Web Studio) + `app.py` (Streamlit Studio):** Clean, editorial dark-forest & electric-lime (`#0e1a16` / `#d4ff32`) three-view interface (**Prediction studio**, **How it works**, and **Model intelligence**) with real-time corridor trajectory visuals, 1-click scenario presets, live Open-Meteo METAR fetching, and 24-hour lowest-risk departure slot recommendations.
 
 ---
 
@@ -36,13 +31,16 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Download full-year 2024 U.S. DOT BTS (~7M flights) + NOAA ASOS weather (~525K rows)
+# 2. Download full-year 2024 U.S. DOT BTS (~7M flights) + NOAA ASOS weather (~518K rows)
 python download_real_bigdata.py
 
 # 3. Run the complete 6-stage Out-of-Core Big Data & ML pipeline
 python run_pipeline.py
 
-# 4. Launch the interactive Streamlit live dashboard
+# 4. Launch the minimalist SKY / MOVE web studio (http://localhost:8501)
+python server.py
+
+# (Alternative: launch the matching simplified Streamlit interface)
 streamlit run app.py
 ```
 
