@@ -5,29 +5,30 @@
     "Gradient Boosting",
     "XGBoost Classifier (Tuned)"
   ],
-  "secondary_regressor": "XGBRegressor (Delay Minutes)",
+  "secondary_regressor": "XGBRegressor (Delay Minutes, tree_method='hist')",
+  "smote_training_vectors": 372426,
   "cv_results": {
     "Logistic Regression (Baseline)": {
-      "cv_roc_auc_mean": 0.8378,
-      "cv_roc_auc_std": 0.0049,
-      "train_time_sec": 0.35
+      "cv_roc_auc_mean": 0.7815,
+      "cv_roc_auc_std": 0.0047,
+      "train_time_sec": 0.62
     },
     "Random Forest (100 Trees)": {
-      "cv_roc_auc_mean": 0.8715,
-      "cv_roc_auc_std": 0.0082,
-      "train_time_sec": 3.29
+      "cv_roc_auc_mean": 0.7871,
+      "cv_roc_auc_std": 0.0033,
+      "train_time_sec": 10.71
     },
     "Gradient Boosting": {
-      "cv_roc_auc_mean": 0.8813,
-      "cv_roc_auc_std": 0.0067,
-      "train_time_sec": 39.91
+      "cv_roc_auc_mean": 0.79,
+      "cv_roc_auc_std": 0.003,
+      "train_time_sec": 5.13
     },
     "XGBoost Classifier (Tuned)": {
-      "cv_roc_auc_mean": 0.8759,
-      "cv_roc_auc_std": 0.0061,
-      "train_time_sec": 1.85
+      "cv_roc_auc_mean": 0.7882,
+      "cv_roc_auc_std": 0.0028,
+      "train_time_sec": 4.56
     }
   },
-  "model_bundle_path": "X:\\BIGDATA PROJECT\\models\\flight_delay_models.joblib",
-  "total_elapsed_sec": 45.81
+  "model_bundle_size_mb": 13.48,
+  "total_elapsed_sec": 22.64
 }

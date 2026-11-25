@@ -1,21 +1,61 @@
-IATA,NAME,CITY,STATE,LAT,LON,CAPACITY_HR,CLIMATE
-ATL,Hartsfield-Jackson Atlanta Intl,Atlanta,GA,33.6407,-84.4277,42,humid_subtropical
-ORD,Chicago O'Hare Intl,Chicago,IL,41.9742,-87.9073,38,continental_winter
-DFW,Dallas/Fort Worth Intl,Dallas,TX,32.8998,-97.0403,39,convective_plains
-DEN,Denver International,Denver,CO,39.8561,-104.6737,36,alpine_winter
-LAX,Los Angeles International,Los Angeles,CA,33.9416,-118.4085,35,coastal_marine
-JFK,John F. Kennedy Intl,New York,NY,40.6413,-73.7781,28,northeast_coastal
-EWR,Newark Liberty Intl,Newark,NJ,40.6895,-74.1745,26,northeast_coastal
-SFO,San Francisco Intl,San Francisco,CA,37.6213,-122.379,27,coastal_fog
-SEA,Seattle-Tacoma Intl,Seattle,WA,47.4502,-122.3088,28,pacific_rain
-MIA,Miami International,Miami,FL,25.7959,-80.287,30,tropical
-MCO,Orlando International,Orlando,FL,28.4312,-81.3081,30,tropical
-BOS,Boston Logan Intl,Boston,MA,42.3656,-71.0096,27,northeast_coastal
-CLT,Charlotte Douglas Intl,Charlotte,NC,35.2144,-80.9473,33,humid_subtropical
-LAS,Harry Reid International,Las Vegas,NV,36.084,-115.1537,31,arid_desert
-PHX,Phoenix Sky Harbor Intl,Phoenix,AZ,33.4373,-112.0078,32,arid_desert
-IAH,George Bush Intercontinental,Houston,TX,29.9902,-95.3368,32,humid_subtropical
-MSP,Minneapolis-Saint Paul Intl,Minneapolis,MN,44.8848,-93.2223,29,continental_winter
-DTW,Detroit Metropolitan,Detroit,MI,42.2162,-83.3554,29,continental_winter
-LGA,LaGuardia Airport,New York,NY,40.7769,-73.874,25,northeast_coastal
-SLC,Salt Lake City Intl,Salt Lake City,UT,40.7899,-111.9791,28,alpine_winter
+IATA,NAME,CITY,STATE,LAT,LON,TZ,CAPACITY_HR
+ATL,Hartsfield-Jackson Atlanta Intl,Atlanta,GA,33.6407,-84.4277,America/New_York,110
+DFW,Dallas/Fort Worth Intl,Dallas,TX,32.8998,-97.0403,America/Chicago,98
+DEN,Denver International,Denver,CO,39.8561,-104.6737,America/Denver,95
+ORD,Chicago O'Hare Intl,Chicago,IL,41.9742,-87.9073,America/Chicago,96
+LAX,Los Angeles International,Los Angeles,CA,33.9416,-118.4085,America/Los_Angeles,82
+CLT,Charlotte Douglas Intl,Charlotte,NC,35.2144,-80.9473,America/New_York,78
+MCO,Orlando International,Orlando,FL,28.4312,-81.3081,America/New_York,68
+LAS,Harry Reid International,Las Vegas,NV,36.084,-115.1537,America/Los_Angeles,66
+PHX,Phoenix Sky Harbor Intl,Phoenix,AZ,33.4373,-112.0078,America/Phoenix,68
+MIA,Miami International,Miami,FL,25.7959,-80.287,America/New_York,62
+SEA,Seattle-Tacoma Intl,Seattle,WA,47.4502,-122.3088,America/Los_Angeles,60
+IAH,George Bush Intercontinental,Houston,TX,29.9902,-95.3368,America/Chicago,66
+EWR,Newark Liberty Intl,Newark,NJ,40.6895,-74.1745,America/New_York,52
+SFO,San Francisco Intl,San Francisco,CA,37.6213,-122.379,America/Los_Angeles,54
+BOS,Boston Logan Intl,Boston,MA,42.3656,-71.0096,America/New_York,56
+MSP,Minneapolis-Saint Paul Intl,Minneapolis,MN,44.8848,-93.2223,America/Chicago,58
+FLL,Fort Lauderdale-Hollywood Intl,Fort Lauderdale,FL,26.0726,-80.1527,America/New_York,48
+LGA,LaGuardia Airport,New York,NY,40.7769,-73.874,America/New_York,54
+DTW,Detroit Metropolitan,Detroit,MI,42.2162,-83.3554,America/Detroit,58
+PHL,Philadelphia International,Philadelphia,PA,39.8744,-75.2424,America/New_York,52
+SLC,Salt Lake City Intl,Salt Lake City,UT,40.7899,-111.9791,America/Denver,52
+BWI,Baltimore/Washington Intl,Baltimore,MD,39.1774,-76.6684,America/New_York,48
+DCA,Ronald Reagan Washington National,Washington,VA,38.8512,-77.0402,America/New_York,50
+SAN,San Diego International,San Diego,CA,32.7338,-117.1933,America/Los_Angeles,42
+IAD,Washington Dulles Intl,Dulles,VA,38.9531,-77.4565,America/New_York,50
+TPA,Tampa International,Tampa,FL,27.9755,-82.5332,America/New_York,44
+BNA,Nashville International,Nashville,TN,36.1263,-86.6774,America/Chicago,46
+AUS,Austin-Bergstrom Intl,Austin,TX,30.1975,-97.6664,America/Chicago,44
+MDW,Chicago Midway Intl,Chicago,IL,41.7868,-87.7522,America/Chicago,42
+JFK,John F. Kennedy Intl,New York,NY,40.6413,-73.7781,America/New_York,56
+DAL,Dallas Love Field,Dallas,TX,32.8471,-96.8518,America/Chicago,38
+PDX,Portland International,Portland,OR,45.5898,-122.5951,America/Los_Angeles,38
+STL,St. Louis Lambert Intl,St. Louis,MO,38.7487,-90.37,America/Chicago,38
+RDU,Raleigh-Durham Intl,Raleigh,NC,35.8801,-78.788,America/New_York,36
+HOU,William P. Hobby Airport,Houston,TX,29.6454,-95.2789,America/Chicago,36
+SMF,Sacramento International,Sacramento,CA,38.6954,-121.5908,America/Los_Angeles,34
+MSY,Louis Armstrong New Orleans Intl,New Orleans,LA,29.9934,-90.258,America/Chicago,34
+SJC,San Jose Mineta Intl,San Jose,CA,37.3639,-121.9289,America/Los_Angeles,34
+SNA,John Wayne Airport,Santa Ana,CA,33.6762,-117.8675,America/Los_Angeles,32
+MCI,Kansas City International,Kansas City,MO,39.2976,-94.7139,America/Chicago,34
+OAK,Oakland International,Oakland,CA,37.7126,-122.2197,America/Los_Angeles,32
+SAT,San Antonio International,San Antonio,TX,29.5337,-98.4698,America/Chicago,32
+RSW,Southwest Florida Intl,Fort Myers,FL,26.5362,-81.7552,America/New_York,32
+CLE,Cleveland Hopkins Intl,Cleveland,OH,41.4117,-81.8498,America/New_York,32
+IND,Indianapolis International,Indianapolis,IN,39.7173,-86.2944,America/Indiana/Indianapolis,32
+PIT,Pittsburgh International,Pittsburgh,PA,40.4915,-80.2329,America/New_York,32
+CVG,Cincinnati/Northern Kentucky Intl,Cincinnati,KY,39.0488,-84.6678,America/New_York,32
+CMH,John Glenn Columbus Intl,Columbus,OH,39.998,-82.8919,America/New_York,32
+PBI,Palm Beach International,West Palm Beach,FL,26.6832,-80.0956,America/New_York,30
+JAX,Jacksonville International,Jacksonville,FL,30.4941,-81.6879,America/New_York,28
+ONT,Ontario International,Ontario,CA,34.056,-117.6012,America/Los_Angeles,28
+BUR,Hollywood Burbank Airport,Burbank,CA,34.2007,-118.3585,America/Los_Angeles,26
+BDL,Bradley International,Hartford,CT,41.9389,-72.6832,America/New_York,28
+BUF,Buffalo Niagara Intl,Buffalo,NY,42.9405,-78.7322,America/New_York,26
+MKE,Milwaukee Mitchell Intl,Milwaukee,WI,42.9472,-87.8966,America/Chicago,28
+ABQ,Albuquerque International Sunport,Albuquerque,NM,35.0402,-106.609,America/Denver,26
+OMA,Eppley Airfield,Omaha,NE,41.3032,-95.8941,America/Chicago,24
+MEM,Memphis International,Memphis,TN,35.0424,-89.9767,America/Chicago,28
+RIC,Richmond International,Richmond,VA,37.5052,-77.3197,America/New_York,24
+BOI,Boise Airport,Boise,ID,43.5644,-116.2228,America/Boise,26

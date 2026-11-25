@@ -1,32 +1,52 @@
-=== PySpark SQL & Catalyst Execution Plan Specification ===
-Note: Executed via Relational Vectorized Engine (Local Java Runtime not detected on PATH;
-install OpenJDK 17+ to execute directly on JVM SparkSession).
+=== PySpark SQL & Out-of-Core Vectorized Physical Execution Plan ===
+Dataset Scale: 7,079,061 Raw U.S. DOT BTS Flight Records -> 5,654,432 Weather-Aligned Hub Flights
 
---- Spark SQL Pipeline Definition ---
+--- Equivalent PySpark / ANSI SQL Transformation DAG ---
+WITH weather_3h AS (
+    SELECT
+        STATION_IATA,
+        OBS_TIMESTAMP,
+        TEMP_F,
+        DEW_POINT_F,
+        WIND_SPEED_KT,
+        VISIBILITY_MI,
+        PRECIP_IN,
+        PRESSURE_MB,
+        WEATHER_CONDITION,
+        MAX(WIND_SPEED_KT) OVER (
+            PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+        ) AS wind_max_3h,
+        SUM(PRECIP_IN) OVER (
+            PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+        ) AS precip_sum_3h,
+        MIN(VISIBILITY_MI) OVER (
+            PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP
+            ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+        ) AS vis_min_3h
+    FROM noaa_weather_hourly
+)
 SELECT
     f.FL_DATE,
     f.OP_UNIQUE_CARRIER,
-    al.AIRLINE_NAME,
-    al.FLEET_TYPE,
+    COALESCE(al.AIRLINE_NAME, f.OP_UNIQUE_CARRIER) AS AIRLINE_NAME,
+    COALESCE(al.FLEET_TYPE, 'Commercial Carrier') AS FLEET_TYPE,
     f.TAIL_NUM,
     f.OP_CARRIER_FL_NUM,
     f.ORIGIN,
-    ap_orig.CITY        AS ORIGIN_CITY,
-    ap_orig.STATE       AS ORIGIN_STATE,
-    ap_orig.LAT         AS ORIGIN_LAT,
-    ap_orig.LON         AS ORIGIN_LON,
+    ap_orig.CITY AS ORIGIN_CITY,
+    ap_orig.STATE AS ORIGIN_STATE,
+    ap_orig.LAT AS ORIGIN_LAT,
+    ap_orig.LON AS ORIGIN_LON,
     ap_orig.CAPACITY_HR AS ORIGIN_CAPACITY_HR,
     f.DEST,
-    ap_dest.CITY        AS DEST_CITY,
-    ap_dest.STATE       AS DEST_STATE,
-    ap_dest.LAT         AS DEST_LAT,
-    ap_dest.LON         AS DEST_LON,
     f.CRS_DEP_TIME,
     f.CRS_DEP_TIMESTAMP,
-    DATE_TRUNC('hour', CAST(f.CRS_DEP_TIMESTAMP AS TIMESTAMP)) AS DEP_HOUR_TS,
-    f.DEP_TIME,
+    SUBSTR(f.CRS_DEP_TIMESTAMP, 1, 13) || ':00:00' AS DEP_HOUR_TS,
     f.DEP_DELAY,
-    CAST(f.DEP_DEL15 AS INT) AS DEP_DEL15,
+    CAST(f.DEP_DEL15 AS INTEGER) AS DEP_DEL15,
+    COALESCE(f.CRS_ELAPSED_TIME, f.DISTANCE / 7.5 + 35.0) AS CRS_ELAPSED_TIME,
     f.DISTANCE,
     w.TEMP_F,
     w.DEW_POINT_F,
@@ -34,42 +54,77 @@ SELECT
     w.VISIBILITY_MI,
     w.PRECIP_IN,
     w.PRESSURE_MB,
-    w.WEATHER_CONDITION
+    w.WEATHER_CONDITION,
+    ROUND(w.wind_max_3h, 1) AS wind_max_3h,
+    ROUND(w.precip_sum_3h, 3) AS precip_sum_3h,
+    ROUND(w.vis_min_3h, 2) AS vis_min_3h
 FROM bts_flights f
-INNER JOIN noaa_weather_hourly w
+INNER JOIN weather_3h w
     ON f.ORIGIN = w.STATION_IATA
-   AND DATE_TRUNC('hour', CAST(f.CRS_DEP_TIMESTAMP AS TIMESTAMP)) = CAST(w.OBS_TIMESTAMP AS TIMESTAMP)
-LEFT JOIN broadcast(airports_metadata) ap_orig
+   AND (SUBSTR(f.CRS_DEP_TIMESTAMP, 1, 13) || ':00:00') = w.OBS_TIMESTAMP
+LEFT JOIN airports_metadata ap_orig
     ON f.ORIGIN = ap_orig.IATA
-LEFT JOIN broadcast(airports_metadata) ap_dest
-    ON f.DEST = ap_dest.IATA
-LEFT JOIN broadcast(airlines_metadata) al
+LEFT JOIN airlines_metadata al
     ON f.OP_UNIQUE_CARRIER = al.CARRIER_CODE
 WHERE f.CANCELLED = 0
   AND f.DIVERTED = 0
   AND f.ORIGIN IS NOT NULL
   AND f.DEST IS NOT NULL
   AND f.DEP_DELAY IS NOT NULL
-ORDER BY f.CRS_DEP_TIMESTAMP ASC
+  AND f.DEP_DEL15 IS NOT NULL
+  AND f.DISTANCE IS NOT NULL
 
---- Physical Plan (AdaptiveSparkPlan) ---
-AdaptiveSparkPlan isFinalPlan=true
-+- Sort [CRS_DEP_TIMESTAMP ASC NULLS FIRST], true, 0
-   +- Exchange rangepartitioning(CRS_DEP_TIMESTAMP ASC NULLS FIRST, 8), ENSURE_REQUIREMENTS
-      +- BroadcastHashJoin [OP_UNIQUE_CARRIER], [CARRIER_CODE], LeftOuter, BuildRight
-         :- BroadcastHashJoin [DEST], [IATA], LeftOuter, BuildRight
-         :  :- BroadcastHashJoin [ORIGIN], [IATA], LeftOuter, BuildRight
-         :  :  :- SortMergeJoin [ORIGIN, date_trunc('hour', CRS_DEP_TIMESTAMP)], [STATION_IATA, OBS_TS], Inner
-         :  :  :  :- Sort [ORIGIN ASC, DEP_HOUR_TS ASC], false, 0
-         :  :  :  :  +- Exchange hashpartitioning(ORIGIN, DEP_HOUR_TS, 8)
-         :  :  :  :     +- Filter ((CANCELLED = 0) AND (DIVERTED = 0) AND isnotnull(ORIGIN) AND isnotnull(DEP_DELAY))
-         :  :  :  :        +- FileScan csv bts_flights_2025_*.csv
-         :  :  :  +- Sort [STATION_IATA ASC, OBS_TS ASC], false, 0
-         :  :  :     +- Exchange hashpartitioning(STATION_IATA, OBS_TS, 8)
-         :  :  :        +- FileScan csv noaa_weather_hourly.csv
-         :  :  +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
-         :  :     +- FileScan csv airports_metadata.csv
-         :  +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
-         :     +- FileScan csv airports_metadata.csv
-         +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
-            +- FileScan csv airlines_metadata.csv
+--- Physical Vectorized Execution Plan ---
+physical_plan:
+╭─ Projection ────────────────────────────────────────────────────╮
+│ Projections: FL_DATE, OP_UNIQUE_CARRIER, AIRLINE_NAME,          │
+│              FLEET_TYPE, TAIL_NUM, OP_CARRIER_FL_NUM, ORIGIN,   │
+│              ORIGIN_CITY, ORIGIN_STATE, ORIGIN_LAT, ORIGIN_LON, │
+│              ORIGIN_CAPACITY_HR, DEST, CRS_DEP_TIME,            │
+│              CRS_DEP_TIMESTAMP, DEP_HOUR_TS, DEP_DELAY,         │
+│              DEP_DEL15, CRS_ELAPSED_TIME, DISTANCE, TEMP_F,     │
+│              DEW_POINT_F, WIND_SPEED_KT, VISIBILITY_MI,         │
+│              PRECIP_IN, PRESSURE_MB, WEATHER_CONDITION,         │
+│              wind_max_3h, precip_sum_3h, vis_min_3h             │
+│ ~1,883,439 rows                                                 │
+╰────────────────────────────────┬────────────────────────────────╯
+╭─ Hash Join ────────────────────┴────────────────────────────────╮
+│ Join Type: LEFT                                                 │
+│ Conditions: ORIGIN = IATA                                       │
+│ ~1,883,439 rows                                                 │
+╰────────────────────────────────┬────────────────────────────────╯
+                                 ├──────────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Hash Join ────────────────────┴────────────────────────────────╮                               ╭─ Seq Scan ──────────────┴────────────────────────╮
+│ Join Type: LEFT                                                 │                               │ Table: aviation_warehouse.main.airports_metadata │
+│ Conditions:                                                     │                               │ Type: Sequential Scan                            │
+│ OP_UNIQUE_CARRIER = CARRIER_CODE                                │                               │ Projections: IATA, CITY, STATE, LAT, LON,        │
+│ ~1,883,439 rows                                                 │                               │              CAPACITY_HR                         │
+╰────────────────────────────────┬────────────────────────────────╯                               │ ~60 rows                                         │
+                                 ├─────────────────────────────────────────────────────────────╮  ╰──────────────────────────────────────────────────╯
+╭─ Hash Join ────────────────────┴────────────────────────────────╮  ╭─ Seq Scan ──────────────┴────────────────────────╮
+│ Join Type: INNER                                                │  │ Table: aviation_warehouse.main.airlines_metadata │
+│ Conditions:                                                     │  │ Type: Sequential Scan                            │
+│ ORIGIN = STATION_IATA,                                          │  │ Projections: CARRIER_CODE, AIRLINE_NAME,         │
+│ (substr(CRS_DEP_TIMESTAMP, 1, 13) || ':00:00') = OBS_TIMESTAMP  │  │              FLEET_TYPE                          │
+│ ~1,883,439 rows                                                 │  │ ~15 rows                                         │
+╰────────────────────────────────┬────────────────────────────────╯  ╰──────────────────────────────────────────────────╯
+                                 ├──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╭─ Seq Scan ─────────────────────┴────────────────────────────────╮  ╭─ Projection ─────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────╮
+│ Table: aviation_warehouse.main.bts_flights                      │  │ Projections: #0, #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11                                                                       │
+│ Type: Sequential Scan                                           │  │ ~518,256 rows                                                                                                                       │
+│ Projections: ORIGIN, CRS_DEP_TIMESTAMP, OP_UNIQUE_CARRIER,      │  ╰──────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────╯
+│              DEST, DEP_DELAY, DEP_DEL15, DISTANCE, FL_DATE,     │  ╭─ Window ─────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────╮
+│              TAIL_NUM, OP_CARRIER_FL_NUM, CRS_DEP_TIME,         │  │ Projections:                                                                                                                        │
+│              CRS_ELAPSED_TIME                                   │  │ max(WIND_SPEED_KT) OVER (PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP ASC NULLS LAST ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), │
+│ Filters: CANCELLED = 0, DIVERTED = 0, DEP_DELAY IS NOT NULL,    │  │ sum(PRECIP_IN) OVER (PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP ASC NULLS LAST ROWS BETWEEN 2 PRECEDING AND CURRENT ROW),     │
+│          DEP_DEL15 IS NOT NULL                                  │  │ min(VISIBILITY_MI) OVER (PARTITION BY STATION_IATA ORDER BY OBS_TIMESTAMP ASC NULLS LAST ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)  │
+│ ~3,539,531 rows                                                 │  │ ~518,256 rows                                                                                                                       │
+╰─────────────────────────────────────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────╯
+                                                                     ╭─ Seq Scan ───────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────╮
+                                                                     │ Table: aviation_warehouse.main.noaa_weather_hourly                                                                                  │
+                                                                     │ Type: Sequential Scan                                                                                                               │
+                                                                     │ Projections: STATION_IATA, OBS_TIMESTAMP, TEMP_F, DEW_POINT_F, WIND_SPEED_KT, VISIBILITY_MI, PRECIP_IN, PRESSURE_MB,                │
+                                                                     │              WEATHER_CONDITION                                                                                                      │
+                                                                     │ ~518,256 rows                                                                                                                       │
+                                                                     ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+

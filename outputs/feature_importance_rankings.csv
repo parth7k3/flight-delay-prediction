@@ -1,19 +1,27 @@
 feature,display_name,xgb_importance,target_correlation
-dow_cos,Day of Week (Cos),0.1969,-0.0113
-VISIBILITY_MI,Visibility (miles),0.1611,-0.3945
-is_weekend,Weekend Flag,0.1021,-0.0009
-dep_hour_sin,Departure Hour (Sin),0.0847,-0.2016
-carrier_hist_delay_rate,Carrier Historical Delay Prior,0.0845,0.0537
-WIND_SPEED_KT,Wind Speed (knots),0.0701,0.2731
-origin_congestion_ratio,Origin Hub Congestion Ratio,0.0598,0.1695
-dep_hour_cos,Departure Hour (Cos),0.0584,0.0969
-dow_sin,Day of Week (Sin),0.0569,0.0003
-TEMP_F,Surface Temp (°F),0.0498,0.182
-DEW_POINT_F,Dew Point (°F),0.0175,0.2416
-PRECIP_IN,Precipitation (in/hr),0.0154,0.2651
-temp_dew_spread,Temp-Dew Spread (°F),0.0139,-0.2063
-origin_rolling_3h_vol,Origin 3h Rolling Dep. Volume,0.0118,0.1506
-origin_hist_delay_rate,Origin Hub Delay Prior,0.0071,0.1447
-PRESSURE_MB,Barometric Pressure (mb),0.0035,-0.168
-dest_hist_delay_rate,Destination Hub Delay Prior,0.0035,0.013
-DISTANCE,Flight Distance (mi),0.0031,0.0322
+prev_aircraft_delay_t2h,Prev-Leg Aircraft Delay @ T-2h (min),0.2387,0.324
+carrier_hist_delay_rate,Carrier Historical Delay Rate,0.1368,0.0862
+has_inbound_leg,Has Same-Day Inbound Aircraft Leg,0.0677,0.0862
+vis_min_3h,3h Minimum Visibility (mi),0.0669,-0.0128
+precip_sum_3h,3h Cumulative Precip (in),0.0586,0.023
+origin_t2h_delay_rate,Origin Hub Delay Rate @ T-2h,0.0565,0.1111
+dep_hour_sin,Departure Hour (Sin),0.0553,-0.1223
+WIND_SPEED_KT,Surface Wind Speed (kt),0.0393,0.0107
+is_weekend,Weekend Indicator,0.0354,0.0571
+VISIBILITY_MI,Surface Visibility (mi),0.0346,-0.0082
+dest_t2h_delay_rate,Dest. Hub Delay Rate @ T-2h,0.0345,0.0677
+origin_hist_delay_rate,Origin Hub Historical Delay Rate,0.0253,0.0614
+dest_hist_delay_rate,Dest. Hub Historical Delay Rate,0.0234,0.0298
+PRECIP_IN,Hourly Precip (in/hr),0.0181,0.0203
+dep_hour_cos,Departure Hour (Cos),0.014,0.0525
+origin_rolling_3h_vol,Origin 3h Rolling Dep. Volume,0.0113,0.0428
+DISTANCE,Flight Distance (mi),0.0101,0.0081
+origin_congestion_ratio,Origin Hub Congestion Ratio,0.01,0.0509
+wind_max_3h,3h Peak Wind Gust/Speed (kt),0.0097,0.0189
+DEW_POINT_F,Origin Dew Point (°F),0.0097,-0.0035
+CRS_ELAPSED_TIME,Scheduled Block Time (min),0.0082,0.0054
+TEMP_F,Origin Temp (°F),0.008,0.062
+temp_dew_spread,Temp-Dew Fog Spread (°F),0.008,0.0611
+PRESSURE_MB,Sea-Level Pressure (mb),0.0077,-0.0179
+dow_sin,Day of Week (Sin),0.0061,-0.0451
+dow_cos,Day of Week (Cos),0.0059,0.05

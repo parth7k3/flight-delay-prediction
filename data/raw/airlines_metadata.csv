@@ -1,9 +1,16 @@
 CARRIER_CODE,AIRLINE_NAME,FLEET_TYPE
-DL,Delta Air Lines,Mainline Hub
-AS,Alaska Airlines,Mainline West
-UA,United Airlines,Mainline Hub
-AA,American Airlines,Mainline Hub
-WN,Southwest Airlines,Point-to-Point
-B6,JetBlue Airways,Northeast Focus
+AA,American Airlines,Mainline Network Hub
+DL,Delta Air Lines,Mainline Network Hub
+UA,United Airlines,Mainline Network Hub
+WN,Southwest Airlines,Point-to-Point National
+AS,Alaska Airlines,Mainline West Coast
+B6,JetBlue Airways,Northeast / East Focus
 NK,Spirit Airlines,Ultra Low-Cost
 F9,Frontier Airlines,Ultra Low-Cost
+G4,Allegiant Air,Leisure Low-Cost
+HA,Hawaiian Airlines,Pacific / Mainline
+OO,SkyWest Airlines,Regional Partner
+YX,Republic Airways,Regional Partner
+MQ,Envoy Air,Regional Partner
+OH,PSA Airlines,Regional Partner
+9E,Endeavor Air,Regional Partner

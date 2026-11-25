@@ -13,14 +13,14 @@
 
 ---
 
-## End-to-End 7-Stage Architecture
+## End-to-End 7-Stage Big Data Architecture (~7.0M Real Flight Records)
 
-1. **`generate_datasets.py` & `ingestion.py` (Data Storage):** Generates/ingests monthly partitioned U.S. BTS flight records, hourly NOAA surface weather observations across 20 major continental U.S. hubs, and airport/airline lookup registries into PostgreSQL (`DATABASE_URL`) or indexed local SQLite storage (`data/db/aviation_warehouse.db`) with composite B-tree indexes on `(ORIGIN, CRS_DEP_TIMESTAMP)` and `(STATION_IATA, OBS_TIMESTAMP)`.
-2. **`spark_clean_join.py` (Cleaning & Weather Alignment):** Drops malformed/NULL records, filters out cancelled (`CANCELLED == 1`) and diverted (`DIVERTED == 1`) flights, aligns scheduled departures to hourly NOAA weather readings, and exports the PySpark SQL & Catalyst query execution plan (`outputs/plans/pyspark_execution_plan.txt`).
-3. **`feature_engineering.py` (Feature Extraction):** Encodes 24-hour circular departure geometry (`dep_hour_sin`, `dep_hour_cos`), day-of-week cyclical encodings, dew-point fog spread, rolling 3-hour origin hub departure volume (`origin_rolling_3h_vol`), runway congestion ratio, and leak-free chronological carrier/airport baselines.
-4. **`balance_classes.py` (Chronological Split & SMOTE):** Performs a strict 80/20 chronological split to prevent temporal data leakage and applies SMOTE synthetic oversampling exclusively on the training partition while keeping the 20% test split untouched.
-5. **`train_models.py` (Model Training):** Trains and cross-validates Logistic Regression, Random Forest (100 Trees), Gradient Boosting, and Tuned XGBoost classifiers (`DEP_DEL15` $\ge$ 15 min), plus a secondary continuous XGBoost Regressor estimating delay duration in minutes.
-6. **`evaluate.py` (Evaluation & Threshold Tuning):** Computes ROC-AUC, PR-AUC, Precision, Recall, F1, and F2 scores on the untouched test split, sweeps operational classification thresholds, and exports plots to `outputs/plots/`.
+1. **`download_real_bigdata.py` & `ingestion.py` (Multi-Million-Row Data Storage):** Acquires all 12 monthly partitions of **2024 U.S. DOT Bureau of Transportation Statistics (BTS) On-Time Performance Logs** (~7.0M real domestic flights), **Full-Year 2024 NOAA/NWS ASOS Hourly Surface Weather Observations** across 60 major U.S. hubs (~525K METAR readings aligned to local airport timezones), and airport/airline metadata registries. Streams partitions out-of-core into a columnar **DuckDB / PostgreSQL-compatible analytical warehouse** (`data/db/aviation_warehouse.duckdb`) indexed on `(ORIGIN, CRS_DEP_TIMESTAMP)` and `(STATION_IATA, OBS_TIMESTAMP)`.
+2. **`spark_clean_join.py` (Out-of-Core Cleaning & Weather Alignment):** Drops malformed/NULL records, filters out cancelled (`CANCELLED == 1`) and diverted (`DIVERTED == 1`) flights, computes 3-hour rolling storm persistence (`wind_max_3h`, `precip_sum_3h`, `vis_min_3h`), joins flights to local hourly NOAA surface weather, writes ZSTD-compressed Parquet, and exports [pyspark_execution_plan.txt](outputs/plans/pyspark_execution_plan.txt).
+3. **`feature_engineering.py` (Window & Cyclical Feature Extraction):** Executes out-of-core SQL window functions and trigonometric encodings (`dep_hour_sin`, `dep_hour_cos`, `dow_sin`, `dow_cos`, `month_sin`, `month_cos`), dew-point fog spread, rolling 3-hour origin hub departure volume (`origin_rolling_3h_vol`), runway congestion ratio, and leak-free chronological 80% carrier/airport delay priors.
+4. **`balance_classes.py` (Chronological 80/20 Split & Training-Fold SMOTE):** Enforces a strict chronological 80/20 split across the full multi-million-row timeline (`Jan–Oct 2024` Train vs. `Oct–Dec 2024` Untouched Test = **1M+ real test flights**) and applies `SMOTE` synthetic oversampling exclusively on the training partition.
+5. **`train_models.py` (Scalable Ensemble Training):** Trains cross-validated Logistic Regression, Random Forest (100 Trees), Histogram Gradient Boosting, and Tuned Histogram XGBoost (`tree_method='hist'`) classifiers (`DEP_DEL15` $\ge$ 15 min), plus a secondary continuous XGBoost Delay Regressor (minutes).
+6. **`evaluate.py` (1M+ Row Evaluation & Threshold Tuning):** Scores all classifiers across the **entire 1,000,000+ row untouched chronological test partition**, calibrates operational recall-prioritized thresholds on a held-out training validation slice, and exports evaluation plots to `outputs/plots/`.
 7. **`app.py` (Interactive Live Serving & BI Console):** Launches the Streamlit Airline Operations Control Center (AOCC) & Business Intelligence demonstration suite featuring:
    - **1-Click Live Presentation Case Studies:** Five pre-configured aviation scenarios (*Nominal Morning VFR*, *>25 kt Crosswind Cliff*, *Winter Blizzard & De-icing*, *SFO Marine Fog*, and *Clear-Sky Evening Hub Cascade*) + **Guided Viva Walkthrough Mode**.
    - **Explainable AI (XAI) & What-If Labs:** Telescoping probability attribution waterfall, 24-hour *"Best Time to Fly"* schedule sweep optimizer, and live non-linear wind sensitivity comparison (*XGBoost vs. Random Forest vs. Logistic Regression*).
@@ -36,10 +36,13 @@
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Run the complete 6-stage Big Data & ML pipeline
+# 2. Download full-year 2024 U.S. DOT BTS (~7M flights) + NOAA ASOS weather (~525K rows)
+python download_real_bigdata.py
+
+# 3. Run the complete 6-stage Out-of-Core Big Data & ML pipeline
 python run_pipeline.py
 
-# 3. Launch the interactive Streamlit live dashboard
+# 4. Launch the interactive Streamlit live dashboard
 streamlit run app.py
 ```
 

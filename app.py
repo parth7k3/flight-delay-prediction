@@ -8,8 +8,8 @@ Module Owner: Abhijeet Rana (S24CSEU1419) | Full Team: Parth, Vipul Gupta, Krish
 from __future__ import annotations
 import json
 import math
-import sqlite3
 from datetime import date, time as dt_time
+import duckdb
 import joblib
 import numpy as np
 import pandas as pd
@@ -21,7 +21,7 @@ import streamlit as st
 from config import (
     AIRPORTS_REGISTRY,
     AIRLINES_REGISTRY,
-    DB_DIR,
+    DUCKDB_PATH,
     MODELS_DIR,
     OUTPUTS_DIR,
     PLANS_DIR,
@@ -136,32 +136,37 @@ DEMO_CASE_STUDIES = {
     "☀️ Case 1: Clear Morning VFR": {
         "origin": "ATL", "dest": "MCO", "carrier": "DL",
         "dep_hour": 7, "dep_min": 15, "traffic": "Standard Schedule (1.0x)",
-        "wx": {"temp": 65.0, "dew": 47.0, "wind": 7.5, "vis": 10.0, "precip": 0.00, "press": 1019.0},
+        "prev_delay": 0.0, "hub_t2h_rate": 0.08,
+        "wx": {"temp": 65.0, "dew": 47.0, "wind": 7.0, "vis": 10.0, "precip": 0.00, "press": 1019.0},
         "story": "Nominal morning hub departure (ATL → MCO, Delta 07:15): overnighted aircraft + VFR weather -> very low delay risk.",
     },
     "🌬️ Case 2: >25 kt Crosswind Cliff": {
         "origin": "ORD", "dest": "LGA", "carrier": "UA",
         "dep_hour": 17, "dep_min": 30, "traffic": "Busy Bank (1.25x)",
+        "prev_delay": 18.0, "hub_t2h_rate": 0.36,
         "wx": {"temp": 50.0, "dew": 37.0, "wind": 31.5, "vis": 8.5, "precip": 0.02, "press": 1005.0},
-        "story": "Choi et al. (2016) Wind Threshold Demo (ORD → LGA, 31.5 kt gusts): crosses FAA 25 kt runway limit, causing tree ensembles to spike sharply above linear models.",
+        "story": "Choi et al. (2016) Wind Threshold Demo (ORD → LGA, 31.5 kt gusts): crosses FAA 25 kt runway limit with rising T-2h hub delays.",
     },
     "❄️ Case 3: Blizzard & De-icing": {
         "origin": "DEN", "dest": "MSP", "carrier": "F9",
         "dep_hour": 19, "dep_min": 15, "traffic": "Busy Bank (1.25x)",
+        "prev_delay": 42.0, "hub_t2h_rate": 0.54,
         "wx": {"temp": 24.0, "dew": 22.5, "wind": 27.5, "vis": 0.75, "precip": 0.34, "press": 1003.0},
-        "story": "Severe Winter De-icing + IFR (DEN → MSP, 24°F + heavy snow): triggers glycol pad queue + evening turnaround compound delay.",
+        "story": "Severe Winter De-icing + IFR (DEN → MSP, 24°F + heavy snow + 42m inbound tail lag): triggers glycol pad queue + turnaround compound delay.",
     },
     "🌫️ Case 4: SFO Marine Fog (IFR)": {
         "origin": "SFO", "dest": "SEA", "carrier": "AS",
         "dep_hour": 8, "dep_min": 30, "traffic": "Busy Bank (1.25x)",
+        "prev_delay": 14.0, "hub_t2h_rate": 0.38,
         "wx": {"temp": 52.0, "dew": 51.0, "wind": 6.0, "vis": 0.50, "precip": 0.01, "press": 1016.0},
         "story": "Coastal Fog Saturation (SFO → SEA, T-Td spread = 1.0°F, 0.5 mi visibility): forces single-runway IFR separation at SFO.",
     },
     "🌇 Case 5: Evening Cascade (Clear Sky)": {
         "origin": "EWR", "dest": "MIA", "carrier": "B6",
         "dep_hour": 20, "dep_min": 15, "traffic": "Peak Holiday Bank (1.50x)",
+        "prev_delay": 48.0, "hub_t2h_rate": 0.45,
         "wx": {"temp": 67.0, "dew": 49.0, "wind": 9.0, "vis": 10.0, "precip": 0.00, "press": 1017.0},
-        "story": "Rebollo & Balakrishnan (2014) Ripple Demo (EWR → MIA, 20:15, 1.5x Hub Load): proves congestion + late inbound aircraft trigger delays even in clear weather!",
+        "story": "Rebollo & Balakrishnan (2014) Ripple Demo (EWR → MIA, 20:15, +48m inbound aircraft delay): proves late inbound tails + hub congestion trigger delays even in clear sky!",
     },
 }
 
@@ -186,7 +191,7 @@ LIMIT 10;""",
     ROUND(AVG(CASE WHEN f.DEP_DEL15 = 1 THEN 100.0 ELSE 0.0 END), 2) AS delay_rate_pct,
     ROUND(AVG(f.DEP_DELAY), 1) AS avg_delay_min
 FROM bts_flights f
-CROSS JOIN noaa_weather_hourly w
+INNER JOIN noaa_weather_hourly w
   ON w.STATION_IATA = f.ORIGIN
  AND w.OBS_TIMESTAMP = SUBSTR(f.CRS_DEP_TIMESTAMP, 1, 13) || ':00:00'
 WHERE f.CANCELLED = 0 AND f.DIVERTED = 0 AND f.DEP_DELAY IS NOT NULL
@@ -247,8 +252,10 @@ def load_pipeline_artifacts() -> dict:
     sql_ddl = (SQL_DIR / "schema_postgres.sql").read_text(encoding="utf-8")
     test_npz = np.load(OUTPUTS_DIR / "xgb_test_predictions.npz")
 
+    sample_pq = PROCESSED_DIR / "dashboard_sample.parquet"
+    target_pq = sample_pq if sample_pq.exists() else (PROCESSED_DIR / "featured_flights.parquet")
     df_feat = pd.read_parquet(
-        PROCESSED_DIR / "featured_flights.parquet",
+        target_pq,
         columns=[
             "ORIGIN", "DEST", "OP_UNIQUE_CARRIER", "dep_hour_float",
             "WIND_SPEED_KT", "VISIBILITY_MI", "PRECIP_IN", "TEMP_F",
@@ -268,21 +275,38 @@ def load_pipeline_artifacts() -> dict:
     }
 
 
-@st.cache_resource
-def get_warehouse_connection() -> sqlite3.Connection:
-    """Connects to aviation_warehouse.db, auto-hydrating from raw CSV partitions if deployed fresh."""
-    db_file = DB_DIR / "aviation_warehouse.db"
-    if not db_file.exists():
-        from ingestion import run_ingestion
-        run_ingestion(force_regenerate=False)
-    conn = sqlite3.connect(str(db_file), check_same_thread=False)
-    return conn
-
-
 @st.cache_data(show_spinner=False)
 def execute_cached_sql(sql_query: str) -> pd.DataFrame:
-    conn = get_warehouse_connection()
-    return pd.read_sql_query(sql_query, conn)
+    if DUCKDB_PATH.exists():
+        con = duckdb.connect(str(DUCKDB_PATH), read_only=True)
+        try:
+            return con.execute(sql_query).fetchdf()
+        finally:
+            con.close()
+    # Cloud fallback using portable dashboard_sample.parquet + metadata CSVs
+    con = duckdb.connect()
+    try:
+        spq = (PROCESSED_DIR / "dashboard_sample.parquet").as_posix()
+        con.execute(
+            f"""
+            CREATE VIEW bts_flights AS
+            SELECT *, 0 AS CANCELLED, 0 AS DIVERTED, CAST(dep_hour_float * 100 AS INT) AS CRS_DEP_TIME
+            FROM read_parquet('{spq}')
+            """
+        )
+        con.execute(
+            f"""
+            CREATE VIEW noaa_weather_hourly AS
+            SELECT ORIGIN AS STATION_IATA, SUBSTR(CRS_DEP_TIMESTAMP,1,13)||':00:00' AS OBS_TIMESTAMP,
+                   WIND_SPEED_KT, VISIBILITY_MI, WEATHER_CONDITION
+            FROM read_parquet('{spq}')
+            """
+        )
+        con.execute(f"CREATE VIEW airports_metadata AS SELECT * FROM read_csv_auto('{(RAW_DIR / 'airports_metadata.csv').as_posix()}', header=true)")
+        con.execute(f"CREATE VIEW airlines_metadata AS SELECT * FROM read_csv_auto('{(RAW_DIR / 'airlines_metadata.csv').as_posix()}', header=true)")
+        return con.execute(sql_query).fetchdf()
+    finally:
+        con.close()
 
 
 def fetch_live_airport_weather(lat: float, lon: float) -> dict | None:
@@ -323,6 +347,8 @@ def build_single_feature_vector(
     precip_in: float,
     pressure_mb: float,
     traffic_mult: float = 1.0,
+    prev_aircraft_delay: float | None = None,
+    origin_t2h_rate: float | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     ap_map = {a["IATA"]: a for a in AIRPORTS_REGISTRY}
     orig_ap = ap_map[origin_iata]
@@ -330,35 +356,56 @@ def build_single_feature_vector(
     meta = bundle["feature_metadata"]
 
     dist = max(180.0, haversine_miles(orig_ap["LAT"], orig_ap["LON"], dest_ap["LAT"], dest_ap["LON"]))
+    crs_elapsed = round(dist / 7.5 + 35.0, 1)
     dep_hr_float = dep_time_val.hour + dep_time_val.minute / 60.0
     dow = fl_date.weekday()
-    cyc = encode_cyclical_time(dep_hr_float, dow)
+    cyc = encode_cyclical_time(dep_hr_float, dow, fl_date.month)
 
-    base_vol = meta["hub_hourly_vol_lookup"].get(f"{origin_iata}_{dep_time_val.hour}", orig_ap["CAPACITY_HR"] * 0.35)
+    base_vol = meta["hub_hourly_vol_lookup"].get(f"{origin_iata}_{dep_time_val.hour}", orig_ap["CAPACITY_HR"] * 1.2)
     roll_3h_vol = round(float(base_vol * traffic_mult), 1)
-    expected_cap = max(orig_ap["CAPACITY_HR"] * 0.42, 1.0)
+    expected_cap = max(orig_ap["CAPACITY_HR"] * 1.6, 10.0)
     cong_ratio = round(roll_3h_vol / expected_cap, 3)
 
     prior = meta["global_delay_prior"]
+    orig_prior = float(meta["origin_hist_delay_rate"].get(origin_iata, prior))
+    dest_prior = float(meta["dest_hist_delay_rate"].get(dest_iata, prior))
+
+    has_inbound = 1.0 if dep_time_val.hour >= 9 else 0.0
+    if prev_aircraft_delay is None:
+        prev_aircraft_delay = 0.0 if dep_time_val.hour < 9 else (14.0 if (wind_kt > 24 or vis_mi < 2.5 or traffic_mult > 1.2) else 0.0)
+    if origin_t2h_rate is None:
+        wx_stress = (0.14 if wind_kt > 24 else 0.0) + (0.14 if vis_mi < 2.5 else 0.0) + (0.10 if precip_in >= 0.1 else 0.0)
+        origin_t2h_rate = min(0.75, orig_prior * traffic_mult + wx_stress)
+
     row = {
-        "DISTANCE": dist,
+        "DISTANCE": round(dist),
+        "CRS_ELAPSED_TIME": round(crs_elapsed),
         "dep_hour_sin": float(cyc["dep_hour_sin"]),
         "dep_hour_cos": float(cyc["dep_hour_cos"]),
         "dow_sin": float(cyc["dow_sin"]),
         "dow_cos": float(cyc["dow_cos"]),
+        "month_sin": float(cyc["month_sin"]),
+        "month_cos": float(cyc["month_cos"]),
         "is_weekend": int(dow in (5, 6)),
-        "TEMP_F": float(temp_f),
-        "DEW_POINT_F": float(dew_f),
-        "temp_dew_spread": round(float(temp_f - dew_f), 2),
-        "WIND_SPEED_KT": float(wind_kt),
-        "VISIBILITY_MI": float(vis_mi),
-        "PRECIP_IN": float(precip_in),
-        "PRESSURE_MB": float(pressure_mb),
-        "origin_rolling_3h_vol": roll_3h_vol,
+        "TEMP_F": round(float(temp_f)),
+        "DEW_POINT_F": round(float(dew_f)),
+        "temp_dew_spread": round(float(temp_f)) - round(float(dew_f)),
+        "WIND_SPEED_KT": round(float(wind_kt)),
+        "VISIBILITY_MI": round(float(vis_mi) * 2.0) / 2.0,
+        "PRECIP_IN": round(float(precip_in), 2),
+        "PRESSURE_MB": round(float(pressure_mb)),
+        "wind_max_3h": round(float(wind_kt) * (1.12 if wind_kt > 18.0 else 1.0)),
+        "precip_sum_3h": round(float(precip_in) * 2.2, 2),
+        "vis_min_3h": round(float(vis_mi) * 2.0) / 2.0,
+        "origin_rolling_3h_vol": round(roll_3h_vol),
         "origin_congestion_ratio": cong_ratio,
+        "prev_aircraft_delay_t2h": round(float(prev_aircraft_delay)),
+        "has_inbound_leg": has_inbound,
+        "origin_t2h_delay_rate": float(origin_t2h_rate),
+        "dest_t2h_delay_rate": dest_prior,
         "carrier_hist_delay_rate": float(meta["carrier_hist_delay_rate"].get(carrier_code, prior)),
-        "origin_hist_delay_rate": float(meta["origin_hist_delay_rate"].get(origin_iata, prior)),
-        "dest_hist_delay_rate": float(meta["dest_hist_delay_rate"].get(dest_iata, prior)),
+        "origin_hist_delay_rate": orig_prior,
+        "dest_hist_delay_rate": dest_prior,
     }
     X_one = pd.DataFrame([row])[bundle["feature_columns"]].astype(np.float32)
     return X_one, {
@@ -385,20 +432,17 @@ def compute_xai_waterfall(
     precip_in: float,
     pressure_mb: float,
     traffic_mult: float,
+    prev_delay: float,
+    hub_t2h_rate: float,
 ) -> pd.DataFrame:
     """Computes telescoping marginal probability attributions from a nominal reference flight to active query."""
     clf = bundle["classifiers"]["XGBoost Classifier (Tuned)"]
 
-    # Step 0: Fleet-neutral baseline (ATL->CLT, DL, 10:00 morning, 0.85x load, clear VFR 64F / 8kt / 10mi)
-    X0, _ = build_single_feature_vector(bundle, "ATL", "CLT", "DL", date(2025, 3, 19), dt_time(10, 0), 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, 0.85)
-    # Step 1: Apply selected Route & Airline Carrier
-    X1, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dt_time(10, 0), 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, 0.85)
-    # Step 2: Apply Scheduled Departure Time Slot (24h cyclical clock)
-    X2, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, 0.85)
-    # Step 3: Apply Origin Hub Bank Congestion Multiplier
-    X3, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, traffic_mult)
-    # Step 4: Apply Surface Weather & Non-Linear Thresholds (Full Active Query)
-    X4, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, temp_f, dew_f, wind_kt, vis_mi, precip_in, pressure_mb, traffic_mult)
+    X0, _ = build_single_feature_vector(bundle, "ATL", "CLT", "DL", date(2024, 9, 18), dt_time(8, 0), 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, 0.85, 0.0, 0.12)
+    X1, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dt_time(8, 0), 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, 0.85, 0.0, 0.12)
+    X2, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, traffic_mult, 0.0, 0.12)
+    X3, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, 64.0, 45.0, 8.0, 10.0, 0.0, 1018.0, traffic_mult, prev_delay, hub_t2h_rate)
+    X4, _ = build_single_feature_vector(bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val, temp_f, dew_f, wind_kt, vis_mi, precip_in, pressure_mb, traffic_mult, prev_delay, hub_t2h_rate)
 
     probs = clf.predict_proba(pd.concat([X0, X1, X2, X3, X4], ignore_index=True))[:, 1] * 100.0
     p0, p1, p2, p3, p4 = [float(x) for x in probs]
@@ -406,9 +450,9 @@ def compute_xai_waterfall(
     return pd.DataFrame([
         {"Factor": "Nominal VFR Baseline", "Delta": round(p0, 1), "Measure": "absolute"},
         {"Factor": f"Route & Carrier ({carrier_code})", "Delta": round(p1 - p0, 1), "Measure": "relative"},
-        {"Factor": f"Departure Slot ({dep_time_val.strftime('%H:%M')})", "Delta": round(p2 - p1, 1), "Measure": "relative"},
-        {"Factor": f"Hub Runway Load ({traffic_mult:.2f}x)", "Delta": round(p3 - p2, 1), "Measure": "relative"},
-        {"Factor": "Origin Weather & Interactions", "Delta": round(p4 - p3, 1), "Measure": "relative"},
+        {"Factor": f"Slot & Hub Bank ({dep_time_val.strftime('%H:%M')})", "Delta": round(p2 - p1, 1), "Measure": "relative"},
+        {"Factor": f"T-2h Tail & Hub Cascade ({prev_delay:+.0f}m)", "Delta": round(p3 - p2, 1), "Measure": "relative"},
+        {"Factor": "Origin Surface Weather (NOAA)", "Delta": round(p4 - p3, 1), "Measure": "relative"},
         {"Factor": "Final Predicted Risk", "Delta": round(p4, 1), "Measure": "total"},
     ])
 
@@ -422,6 +466,8 @@ def _init_predictor_state() -> None:
         st.session_state["dep_hour_k"] = default_case["dep_hour"]
         st.session_state["dep_min_k"] = default_case["dep_min"]
         st.session_state["traffic_label_k"] = default_case["traffic"]
+        st.session_state["prev_delay_k"] = float(default_case["prev_delay"])
+        st.session_state["hub_t2h_k"] = int(round(default_case["hub_t2h_rate"] * 100))
         st.session_state["wx_preset_k"] = "High Crosswinds (>25 kt Runway Alert)"
         st.session_state["temp_k"] = default_case["wx"]["temp"]
         st.session_state["dew_k"] = default_case["wx"]["dew"]
@@ -442,6 +488,8 @@ def _apply_case_study(case_key: str) -> None:
     st.session_state["dep_hour_k"] = c["dep_hour"]
     st.session_state["dep_min_k"] = c["dep_min"]
     st.session_state["traffic_label_k"] = c["traffic"]
+    st.session_state["prev_delay_k"] = float(c["prev_delay"])
+    st.session_state["hub_t2h_k"] = int(round(c["hub_t2h_rate"] * 100))
     st.session_state["temp_k"] = float(c["wx"]["temp"])
     st.session_state["dew_k"] = float(c["wx"]["dew"])
     st.session_state["wind_k"] = float(c["wx"]["wind"])
@@ -492,7 +540,7 @@ def main() -> None:
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Raw BTS Flight Logs", f"{art['ingestion']['total_flights_ingested']:,}", f"{art['ingestion']['partitions_loaded']} Monthly CSVs")
     k2.metric("PySpark Clean & Joined", f"{art['clean_join']['joined_clean_rows']:,}", f"{art['clean_join']['delay_rate_pct']}% Delayed (≥15m)")
-    k3.metric("Tuned XGBoost ROC-AUC", f"{xgb_bench['ROC-AUC']:.3f}", "+0.059 vs Linear Baseline")
+    k3.metric("Tuned XGBoost ROC-AUC", f"{xgb_bench['ROC-AUC']:.3f}", f"{art['eval'].get('test_rows_evaluated', 1130888):,} Test Flights")
     k4.metric("Delay Catch Recall", f"{xgb_bench['Recall'] * 100:.1f}%", f"Precision: {xgb_bench['Precision'] * 100:.1f}%")
     k5.metric("Delay Regressor MAE", f"{art['eval']['secondary_regression_baseline']['mae_minutes']:.1f} min", "Secondary Baseline")
 
@@ -582,6 +630,19 @@ def main() -> None:
             )
             traffic_mult = TRAFFIC_MULT_MAP[traffic_label]
 
+            t2_c1, t2_c2 = st.columns(2)
+            prev_tail_delay = t2_c1.slider(
+                "Inbound Tail Prev-Leg Delay @ T-2h (min)",
+                min_value=-15.0, max_value=140.0, step=1.0, key="prev_delay_k",
+                help="Known delay of this aircraft's prior flight leg on the same day (>=2 hours prior to departure).",
+            )
+            hub_t2h_pct = t2_c2.slider(
+                "Origin Hub T-2h Delay Rate (%)",
+                min_value=5, max_value=75, step=1, key="hub_t2h_k",
+                help="Observed airport delay rate across departures 2–5 hours earlier.",
+            )
+            hub_t2h_rate = float(hub_t2h_pct) / 100.0
+
             st.subheader("2. Origin Surface Weather (NOAA / METAR)")
             wx_col1, wx_col2 = st.columns([1.55, 1.05])
             wx_col1.selectbox(
@@ -622,7 +683,8 @@ def main() -> None:
         eff_dew = min(float(dew_f), float(temp_f))
         X_query, ctx = build_single_feature_vector(
             bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val,
-            float(temp_f), eff_dew, float(wind_kt), float(vis_mi), float(precip_in), float(pressure_mb), traffic_mult
+            float(temp_f), eff_dew, float(wind_kt), float(vis_mi), float(precip_in), float(pressure_mb),
+            traffic_mult, float(prev_tail_delay), hub_t2h_rate
         )
 
         model_probs = {
@@ -767,7 +829,8 @@ def main() -> None:
         with deep_tabs[0]:
             wf_df = compute_xai_waterfall(
                 bundle, origin_iata, dest_iata, carrier_code, fl_date, dep_time_val,
-                float(temp_f), eff_dew, float(wind_kt), float(vis_mi), float(precip_in), float(pressure_mb), traffic_mult
+                float(temp_f), eff_dew, float(wind_kt), float(vis_mi), float(precip_in), float(pressure_mb),
+                traffic_mult, float(prev_tail_delay), hub_t2h_rate
             )
             fig_wf = go.Figure(go.Waterfall(
                 name="Risk Attribution",
@@ -942,7 +1005,7 @@ def main() -> None:
         ap_lookup = {a["IATA"]: a for a in AIRPORTS_REGISTRY}
         hub_ap = ap_lookup[hub_iata]
         rng_board = np.random.default_rng(int(ord(hub_iata[0]) * 100 + wave_start_hr))
-        other_airports = [a["IATA"] for a in AIRPORTS_REGISTRY if a["IATA"] != hub_iata]
+        other_airports = [a["IATA"] for a in AIRPORTS_REGISTRY if a["IATA"] != hub_iata][:24]
         carriers_list = [c["CARRIER_CODE"] for c in AIRLINES_REGISTRY]
 
         board_rows = []
@@ -1239,7 +1302,7 @@ def main() -> None:
         after_canc = raw_n - art["clean_join"]["cancelled_dropped"]
         after_div = after_canc - art["clean_join"]["diverted_dropped"]
         clean_n = art["clean_join"]["joined_clean_rows"]
-        train_raw_n = art["smote"]["train_before_smote"]["total"]
+        train_raw_n = art["smote"].get("full_train_partition", art["smote"]["train_before_smote"])["total"]
         train_smote_n = art["smote"]["train_after_smote"]["total"]
 
         fig_funnel = go.Figure(go.Funnel(

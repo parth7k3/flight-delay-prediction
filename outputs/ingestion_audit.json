@@ -1,52 +1,87 @@
 {
-  "database_dialect": "sqlite",
-  "database_url_masked": "sqlite:///X:/BIGDATA PROJECT/data/db/aviation_warehouse.db",
-  "partitions_loaded": 3,
-  "total_flights_ingested": 90000,
-  "weather_rows_ingested": 43200,
-  "airports_ingested": 20,
-  "airlines_ingested": 8,
-  "indexes_created": 4,
-  "elapsed_sec": 4.47,
-  "partition_audits": [
+  "database_engine": "DuckDB Columnar Analytical Warehouse (PostgreSQL DDL Compatible)",
+  "warehouse_file": "aviation_warehouse.duckdb",
+  "dataset_source": "Official U.S. DOT BTS TranStats (2024 Full Year) + NOAA/NWS ASOS Hourly METAR",
+  "raw_disk_footprint_mb": 652.6,
+  "partitions_loaded": 12,
+  "total_flights_ingested": 7079061,
+  "weather_rows_ingested": 518256,
+  "airports_ingested": 60,
+  "airlines_ingested": 15,
+  "indexes_created": 2,
+  "elapsed_sec": 8.38,
+  "monthly_partition_audits": [
     {
-      "source": "noaa_weather_hourly.csv",
-      "rows": 43200,
-      "columns": 9,
-      "null_columns": {}
+      "month_partition": "2024-01",
+      "rows": 547271,
+      "cancelled_rows": 20389.0,
+      "null_delay_rows": 0.0
     },
     {
-      "source": "bts_flights_2025_01.csv",
-      "rows": 31047,
-      "columns": 15,
-      "null_columns": {
-        "DEP_DEL15": 385,
-        "DEP_DELAY": 423,
-        "DEP_TIME": 385,
-        "ORIGIN": 56
-      }
+      "month_partition": "2024-02",
+      "rows": 519221,
+      "cancelled_rows": 3002.0,
+      "null_delay_rows": 0.0
     },
     {
-      "source": "bts_flights_2025_02.csv",
-      "rows": 28061,
-      "columns": 15,
-      "null_columns": {
-        "DEP_DEL15": 392,
-        "DEP_DELAY": 439,
-        "DEP_TIME": 392,
-        "ORIGIN": 57
-      }
+      "month_partition": "2024-03",
+      "rows": 591767,
+      "cancelled_rows": 5120.0,
+      "null_delay_rows": 0.0
     },
     {
-      "source": "bts_flights_2025_03.csv",
-      "rows": 30892,
-      "columns": 15,
-      "null_columns": {
-        "DEP_DEL15": 401,
-        "DEP_DELAY": 469,
-        "DEP_TIME": 401,
-        "ORIGIN": 45
-      }
+      "month_partition": "2024-04",
+      "rows": 582185,
+      "cancelled_rows": 4035.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-05",
+      "rows": 609743,
+      "cancelled_rows": 8244.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-06",
+      "rows": 611132,
+      "cancelled_rows": 7876.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-07",
+      "rows": 634613,
+      "cancelled_rows": 18372.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-08",
+      "rows": 619025,
+      "cancelled_rows": 12714.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-09",
+      "rows": 582622,
+      "cancelled_rows": 3499.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-10",
+      "rows": 615497,
+      "cancelled_rows": 6284.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-11",
+      "rows": 575404,
+      "cancelled_rows": 2629.0,
+      "null_delay_rows": 0.0
+    },
+    {
+      "month_partition": "2024-12",
+      "rows": 590581,
+      "cancelled_rows": 4151.0,
+      "null_delay_rows": 0.0
     }
   ]
 }

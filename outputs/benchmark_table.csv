@@ -1,5 +1,5 @@
 Model Architecture,Accuracy,Precision,Recall,F1-Score,F2-Score,ROC-AUC,PR-AUC
-Logistic Regression (Baseline),77.71,0.482,0.737,0.583,0.666,0.832,0.627
-Random Forest (100 Trees),85.38,0.621,0.792,0.696,0.75,0.885,0.765
-Gradient Boosting,87.86,0.694,0.761,0.726,0.746,0.891,0.781
-XGBoost Classifier (Tuned),88.31,0.712,0.751,0.731,0.743,0.891,0.782
+Logistic Regression (Baseline),81.23,0.465,0.489,0.477,0.484,0.751,0.501
+Random Forest (100 Trees),82.43,0.497,0.461,0.478,0.468,0.759,0.521
+Gradient Boosting,83.22,0.524,0.452,0.485,0.465,0.763,0.532
+XGBoost Classifier (Tuned),83.38,0.529,0.446,0.484,0.46,0.764,0.534

@@ -1,27 +1,34 @@
 {
   "chronological_split_ratio": "80/20",
-  "train_period_start": "2025-01-01 00:04:00",
-  "train_period_end": "2025-03-13 17:28:00",
-  "test_period_start": "2025-03-13 17:32:00",
-  "test_period_end": "2025-03-31 23:41:00",
+  "cutoff_timestamp": "2024-10-19 22:15:00",
+  "train_period_start": "2024-01-01 00:08:00",
+  "train_period_end": "2024-10-19 22:14:00",
+  "test_period_start": "2024-10-19 22:15:00",
+  "test_period_end": "2024-12-31 23:59:00",
+  "full_train_partition": {
+    "total": 4523544,
+    "on_time_class_0": 3514414,
+    "delayed_class_1": 1009130,
+    "delay_pct": 22.31
+  },
   "train_before_smote": {
-    "total": 70633,
-    "on_time_class_0": 56691,
-    "delayed_class_1": 13942,
-    "delay_pct": 19.74
+    "total": 239768,
+    "on_time_class_0": 186213,
+    "delayed_class_1": 53555,
+    "delay_pct": 22.34
   },
   "train_after_smote": {
-    "total": 113382,
-    "on_time_class_0": 56691,
-    "delayed_class_1": 56691,
-    "synthetic_samples_added": 42749,
+    "total": 372426,
+    "on_time_class_0": 186213,
+    "delayed_class_1": 186213,
+    "synthetic_samples_added": 132658,
     "delay_pct": 50.0
   },
   "test_untouched": {
-    "total": 17659,
-    "on_time_class_0": 13930,
-    "delayed_class_1": 3729,
-    "delay_pct": 21.12
+    "total": 1130888,
+    "on_time_class_0": 933121,
+    "delayed_class_1": 197767,
+    "delay_pct": 17.49
   },
-  "elapsed_sec": 0.32
+  "elapsed_sec": 3.49
 }
