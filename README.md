@@ -21,7 +21,12 @@
 4. **`balance_classes.py` (Chronological Split & SMOTE):** Performs a strict 80/20 chronological split to prevent temporal data leakage and applies SMOTE synthetic oversampling exclusively on the training partition while keeping the 20% test split untouched.
 5. **`train_models.py` (Model Training):** Trains and cross-validates Logistic Regression, Random Forest (100 Trees), Gradient Boosting, and Tuned XGBoost classifiers (`DEP_DEL15` $\ge$ 15 min), plus a secondary continuous XGBoost Regressor estimating delay duration in minutes.
 6. **`evaluate.py` (Evaluation & Threshold Tuning):** Computes ROC-AUC, PR-AUC, Precision, Recall, F1, and F2 scores on the untouched test split, sweeps operational classification thresholds, and exports plots to `outputs/plots/`.
-7. **`app.py` (Interactive Live Serving):** Launches the Streamlit Airline Operations Control Center (AOCC) dashboard with single-flight live delay prediction, live Open-Meteo airport weather fetching, 20-flight hub wave batch scanning, interactive threshold tuning, and pipeline inspection.
+7. **`app.py` (Interactive Live Serving & BI Console):** Launches the Streamlit Airline Operations Control Center (AOCC) & Business Intelligence demonstration suite featuring:
+   - **1-Click Live Presentation Case Studies:** Five pre-configured aviation scenarios (*Nominal Morning VFR*, *>25 kt Crosswind Cliff*, *Winter Blizzard & De-icing*, *SFO Marine Fog*, and *Clear-Sky Evening Hub Cascade*) + **Guided Viva Walkthrough Mode**.
+   - **Explainable AI (XAI) & What-If Labs:** Telescoping probability attribution waterfall, 24-hour *"Best Time to Fly"* schedule sweep optimizer, and live non-linear wind sensitivity comparison (*XGBoost vs. Random Forest vs. Logistic Regression*).
+   - **Business Intelligence KPIs:** Real-time direct block-delay cost estimation (`$101.18/min` A4A benchmark), connecting passenger misconnect exposure, and T-2h proactive dispatch savings.
+   - **National Hub-and-Spoke Radar & Custom Batch CSV Scorer:** Interactive 19-spoke U.S. risk map plus custom CSV schedule upload & scoring.
+   - **Live Relational SQL Warehouse Playground:** Editable read-only SQL lab joining `bts_flights`, `noaa_weather_hourly`, `airports_metadata`, and `airlines_metadata` directly in the browser.
 
 ---
 
