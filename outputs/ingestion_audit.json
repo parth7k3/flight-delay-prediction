@@ -1,0 +1,52 @@
+{
+  "database_dialect": "sqlite",
+  "database_url_masked": "sqlite:///X:/BIGDATA PROJECT/data/db/aviation_warehouse.db",
+  "partitions_loaded": 3,
+  "total_flights_ingested": 90000,
+  "weather_rows_ingested": 43200,
+  "airports_ingested": 20,
+  "airlines_ingested": 8,
+  "indexes_created": 4,
+  "elapsed_sec": 4.47,
+  "partition_audits": [
+    {
+      "source": "noaa_weather_hourly.csv",
+      "rows": 43200,
+      "columns": 9,
+      "null_columns": {}
+    },
+    {
+      "source": "bts_flights_2025_01.csv",
+      "rows": 31047,
+      "columns": 15,
+      "null_columns": {
+        "DEP_DEL15": 385,
+        "DEP_DELAY": 423,
+        "DEP_TIME": 385,
+        "ORIGIN": 56
+      }
+    },
+    {
+      "source": "bts_flights_2025_02.csv",
+      "rows": 28061,
+      "columns": 15,
+      "null_columns": {
+        "DEP_DEL15": 392,
+        "DEP_DELAY": 439,
+        "DEP_TIME": 392,
+        "ORIGIN": 57
+      }
+    },
+    {
+      "source": "bts_flights_2025_03.csv",
+      "rows": 30892,
+      "columns": 15,
+      "null_columns": {
+        "DEP_DEL15": 401,
+        "DEP_DELAY": 469,
+        "DEP_TIME": 401,
+        "ORIGIN": 45
+      }
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+=== PySpark SQL & Catalyst Execution Plan Specification ===
+Note: Executed via Relational Vectorized Engine (Local Java Runtime not detected on PATH;
+install OpenJDK 17+ to execute directly on JVM SparkSession).
+
+--- Spark SQL Pipeline Definition ---
+SELECT
+    f.FL_DATE,
+    f.OP_UNIQUE_CARRIER,
+    al.AIRLINE_NAME,
+    al.FLEET_TYPE,
+    f.TAIL_NUM,
+    f.OP_CARRIER_FL_NUM,
+    f.ORIGIN,
+    ap_orig.CITY        AS ORIGIN_CITY,
+    ap_orig.STATE       AS ORIGIN_STATE,
+    ap_orig.LAT         AS ORIGIN_LAT,
+    ap_orig.LON         AS ORIGIN_LON,
+    ap_orig.CAPACITY_HR AS ORIGIN_CAPACITY_HR,
+    f.DEST,
+    ap_dest.CITY        AS DEST_CITY,
+    ap_dest.STATE       AS DEST_STATE,
+    ap_dest.LAT         AS DEST_LAT,
+    ap_dest.LON         AS DEST_LON,
+    f.CRS_DEP_TIME,
+    f.CRS_DEP_TIMESTAMP,
+    DATE_TRUNC('hour', CAST(f.CRS_DEP_TIMESTAMP AS TIMESTAMP)) AS DEP_HOUR_TS,
+    f.DEP_TIME,
+    f.DEP_DELAY,
+    CAST(f.DEP_DEL15 AS INT) AS DEP_DEL15,
+    f.DISTANCE,
+    w.TEMP_F,
+    w.DEW_POINT_F,
+    w.WIND_SPEED_KT,
+    w.VISIBILITY_MI,
+    w.PRECIP_IN,
+    w.PRESSURE_MB,
+    w.WEATHER_CONDITION
+FROM bts_flights f
+INNER JOIN noaa_weather_hourly w
+    ON f.ORIGIN = w.STATION_IATA
+   AND DATE_TRUNC('hour', CAST(f.CRS_DEP_TIMESTAMP AS TIMESTAMP)) = CAST(w.OBS_TIMESTAMP AS TIMESTAMP)
+LEFT JOIN broadcast(airports_metadata) ap_orig
+    ON f.ORIGIN = ap_orig.IATA
+LEFT JOIN broadcast(airports_metadata) ap_dest
+    ON f.DEST = ap_dest.IATA
+LEFT JOIN broadcast(airlines_metadata) al
+    ON f.OP_UNIQUE_CARRIER = al.CARRIER_CODE
+WHERE f.CANCELLED = 0
+  AND f.DIVERTED = 0
+  AND f.ORIGIN IS NOT NULL
+  AND f.DEST IS NOT NULL
+  AND f.DEP_DELAY IS NOT NULL
+ORDER BY f.CRS_DEP_TIMESTAMP ASC
+
+--- Physical Plan (AdaptiveSparkPlan) ---
+AdaptiveSparkPlan isFinalPlan=true
++- Sort [CRS_DEP_TIMESTAMP ASC NULLS FIRST], true, 0
+   +- Exchange rangepartitioning(CRS_DEP_TIMESTAMP ASC NULLS FIRST, 8), ENSURE_REQUIREMENTS
+      +- BroadcastHashJoin [OP_UNIQUE_CARRIER], [CARRIER_CODE], LeftOuter, BuildRight
+         :- BroadcastHashJoin [DEST], [IATA], LeftOuter, BuildRight
+         :  :- BroadcastHashJoin [ORIGIN], [IATA], LeftOuter, BuildRight
+         :  :  :- SortMergeJoin [ORIGIN, date_trunc('hour', CRS_DEP_TIMESTAMP)], [STATION_IATA, OBS_TS], Inner
+         :  :  :  :- Sort [ORIGIN ASC, DEP_HOUR_TS ASC], false, 0
+         :  :  :  :  +- Exchange hashpartitioning(ORIGIN, DEP_HOUR_TS, 8)
+         :  :  :  :     +- Filter ((CANCELLED = 0) AND (DIVERTED = 0) AND isnotnull(ORIGIN) AND isnotnull(DEP_DELAY))
+         :  :  :  :        +- FileScan csv bts_flights_2025_*.csv
+         :  :  :  +- Sort [STATION_IATA ASC, OBS_TS ASC], false, 0
+         :  :  :     +- Exchange hashpartitioning(STATION_IATA, OBS_TS, 8)
+         :  :  :        +- FileScan csv noaa_weather_hourly.csv
+         :  :  +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
+         :  :     +- FileScan csv airports_metadata.csv
+         :  +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
+         :     +- FileScan csv airports_metadata.csv
+         +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string]))
+            +- FileScan csv airlines_metadata.csv

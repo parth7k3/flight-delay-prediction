@@ -1,0 +1,27 @@
+{
+  "chronological_split_ratio": "80/20",
+  "train_period_start": "2025-01-01 00:04:00",
+  "train_period_end": "2025-03-13 17:28:00",
+  "test_period_start": "2025-03-13 17:32:00",
+  "test_period_end": "2025-03-31 23:41:00",
+  "train_before_smote": {
+    "total": 70633,
+    "on_time_class_0": 56691,
+    "delayed_class_1": 13942,
+    "delay_pct": 19.74
+  },
+  "train_after_smote": {
+    "total": 113382,
+    "on_time_class_0": 56691,
+    "delayed_class_1": 56691,
+    "synthetic_samples_added": 42749,
+    "delay_pct": 50.0
+  },
+  "test_untouched": {
+    "total": 17659,
+    "on_time_class_0": 13930,
+    "delayed_class_1": 3729,
+    "delay_pct": 21.12
+  },
+  "elapsed_sec": 0.32
+}

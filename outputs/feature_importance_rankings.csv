@@ -1,0 +1,19 @@
+feature,display_name,xgb_importance,target_correlation
+dow_cos,Day of Week (Cos),0.1969,-0.0113
+VISIBILITY_MI,Visibility (miles),0.1611,-0.3945
+is_weekend,Weekend Flag,0.1021,-0.0009
+dep_hour_sin,Departure Hour (Sin),0.0847,-0.2016
+carrier_hist_delay_rate,Carrier Historical Delay Prior,0.0845,0.0537
+WIND_SPEED_KT,Wind Speed (knots),0.0701,0.2731
+origin_congestion_ratio,Origin Hub Congestion Ratio,0.0598,0.1695
+dep_hour_cos,Departure Hour (Cos),0.0584,0.0969
+dow_sin,Day of Week (Sin),0.0569,0.0003
+TEMP_F,Surface Temp (°F),0.0498,0.182
+DEW_POINT_F,Dew Point (°F),0.0175,0.2416
+PRECIP_IN,Precipitation (in/hr),0.0154,0.2651
+temp_dew_spread,Temp-Dew Spread (°F),0.0139,-0.2063
+origin_rolling_3h_vol,Origin 3h Rolling Dep. Volume,0.0118,0.1506
+origin_hist_delay_rate,Origin Hub Delay Prior,0.0071,0.1447
+PRESSURE_MB,Barometric Pressure (mb),0.0035,-0.168
+dest_hist_delay_rate,Destination Hub Delay Prior,0.0035,0.013
+DISTANCE,Flight Distance (mi),0.0031,0.0322

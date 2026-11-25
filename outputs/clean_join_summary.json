@@ -1,0 +1,12 @@
+{
+  "engine": "PySpark Relational DAG (Vectorized Warehouse Fallback \u2014 No Host JVM)",
+  "raw_rows": 90000,
+  "cancelled_dropped": 1178,
+  "diverted_dropped": 226,
+  "null_malformed_dropped": 304,
+  "joined_clean_rows": 88292,
+  "elapsed_sec": 1.06,
+  "delay_rate_pct": 20.01,
+  "output_parquet": "X:\\BIGDATA PROJECT\\data\\processed\\cleaned_joined_flights.parquet",
+  "execution_plan_file": "X:\\BIGDATA PROJECT\\outputs\\plans\\pyspark_execution_plan.txt"
+}

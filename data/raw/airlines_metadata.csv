@@ -1,0 +1,9 @@
+CARRIER_CODE,AIRLINE_NAME,FLEET_TYPE
+DL,Delta Air Lines,Mainline Hub
+AS,Alaska Airlines,Mainline West
+UA,United Airlines,Mainline Hub
+AA,American Airlines,Mainline Hub
+WN,Southwest Airlines,Point-to-Point
+B6,JetBlue Airways,Northeast Focus
+NK,Spirit Airlines,Ultra Low-Cost
+F9,Frontier Airlines,Ultra Low-Cost
