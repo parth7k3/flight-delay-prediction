@@ -7,7 +7,6 @@ backed by the 7.08M-row U.S. DOT BTS + 518K-row NOAA ASOS Tuned XGBoost pipeline
 from __future__ import annotations
 import json
 from datetime import date, datetime, time as dt_time
-from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
@@ -38,10 +37,19 @@ WEATHER_MODES = {
 
 _BUNDLE = None
 _ARTIFACTS = None
+_ROUTE_PROFILES = None
 
 
-def _get_state() -> tuple[dict, dict]:
-    global _BUNDLE, _ARTIFACTS
+def _calibrate_prob(p_smote: np.ndarray | float, prior: float = 0.2134) -> np.ndarray | float:
+    """Maps 50/50 SMOTE-balanced posterior back to calibrated empirical probability scale via Bayes' rule."""
+    p = np.clip(p_smote, 0.001, 0.999)
+    num = p * prior
+    den = num + (1.0 - p) * (1.0 - prior)
+    return num / den
+
+
+def _get_state() -> tuple[dict, dict, dict]:
+    global _BUNDLE, _ARTIFACTS, _ROUTE_PROFILES
     if _BUNDLE is None:
         _BUNDLE = joblib.load(MODELS_DIR / "flight_delay_models.joblib")
         for clf in _BUNDLE["classifiers"].values():
@@ -60,7 +68,17 @@ def _get_state() -> tuple[dict, dict]:
         with open(OUTPUTS_DIR / "evaluation_report.json", "r", encoding="utf-8") as f:
             evl = json.load(f)
         _ARTIFACTS = {"ingestion": ing, "clean_join": cln, "smote": smt, "eval": evl}
-    return _BUNDLE, _ARTIFACTS
+
+    if _ROUTE_PROFILES is None:
+        rp_path = OUTPUTS_DIR / "route_slot_profiles.json"
+        if not rp_path.exists():
+            from build_route_profiles import build_route_profiles
+            _ROUTE_PROFILES = build_route_profiles()
+        else:
+            with open(rp_path, "r", encoding="utf-8") as f:
+                _ROUTE_PROFILES = json.load(f)
+
+    return _BUNDLE, _ARTIFACTS, _ROUTE_PROFILES
 
 
 async def index_page(request: Request) -> HTMLResponse:
@@ -68,11 +86,11 @@ async def index_page(request: Request) -> HTMLResponse:
 
 
 async def api_meta(request: Request) -> JSONResponse:
-    bundle, art = _get_state()
+    bundle, art, _ = _get_state()
     return JSONResponse({
         "airports": AIRPORTS_REGISTRY,
         "airlines": AIRLINES_REGISTRY,
-        "default_threshold": float(bundle.get("default_threshold", 0.50)),
+        "default_threshold": 0.32,
         "pipeline": {
             "raw_flights": art["ingestion"]["total_flights_ingested"],
             "partitions": art["ingestion"]["partitions_loaded"],
@@ -104,7 +122,7 @@ async def api_live_weather(request: Request) -> JSONResponse:
 
 
 async def api_predict(request: Request) -> JSONResponse:
-    bundle, _ = _get_state()
+    bundle, _, route_profiles = _get_state()
     body = await request.json()
 
     origin = str(body.get("origin", "ORD")).upper()
@@ -136,7 +154,9 @@ async def api_predict(request: Request) -> JSONResponse:
     precip_in = float(body.get("precip_in", preset["precip"]))
     pressure_mb = float(body.get("pressure_mb", preset["press"]))
     traffic_mult = float(body.get("traffic_mult", 1.0))
-    threshold = float(body.get("threshold", bundle.get("default_threshold", 0.50)))
+
+    prior = float(bundle["feature_metadata"].get("global_delay_prior", 0.2134))
+    cal_cutoff = float(_calibrate_prob(float(bundle.get("default_threshold", 0.52)), prior))
 
     prev_delay_in = body.get("prev_delay", None)
     prev_delay = float(prev_delay_in) if prev_delay_in is not None else None
@@ -147,29 +167,77 @@ async def api_predict(request: Request) -> JSONResponse:
         traffic_mult=traffic_mult, prev_aircraft_delay=prev_delay,
     )
 
-    model_probs = {
-        name: round(float(clf.predict_proba(X_q)[0, 1]) * 100.0, 1)
-        for name, clf in bundle["classifiers"].items()
-    }
-    primary_pct = model_probs["XGBoost Classifier (Tuned)"]
+    raw_xgb_p = float(bundle["classifiers"]["XGBoost Classifier (Tuned)"].predict_proba(X_q)[0, 1])
+    cal_xgb_p = float(_calibrate_prob(raw_xgb_p, prior))
+
+    # Lookup real 2024 BTS operating schedule for (ORIGIN, DEST, CARRIER) -> fallback (ORIGIN, DEST) -> fallback ORIGIN
+    odc_key = f"{origin}_{dest}_{carrier}"
+    od_key = f"{origin}_{dest}"
+    if odc_key in route_profiles["odc"]:
+        sched_slots = route_profiles["odc"][odc_key]
+        schedule_scope = f"{carrier} {origin}→{dest} timetable"
+    elif od_key in route_profiles["od"]:
+        sched_slots = route_profiles["od"][od_key]
+        schedule_scope = f"{origin}→{dest} nonstop timetable"
+    else:
+        sched_slots = route_profiles["origin"].get(origin, {"7": [15, 11.0], "12": [30, 18.0], "18": [0, 26.0]})
+        schedule_scope = f"{origin} hub timetable"
+
+    # Blend active slot's calibrated XGBoost risk with empirical route-hour baseline if available
+    cur_slot_info = sched_slots.get(str(dep_time_val.hour))
+    wx_stress_boost = (1.0 if (wind_kt >= 22 or vis_mi < 4.0 or precip_in >= 0.05 or (prev_delay or 0) >= 15) else 0.0)
+    if cur_slot_info and wx_stress_boost == 0.0:
+        primary_pct = round(0.55 * (cal_xgb_p * 100.0) + 0.45 * float(cur_slot_info[1]), 1)
+    else:
+        primary_pct = round(cal_xgb_p * 100.0, 1)
+
     raw_min = float(bundle["delay_regressor"].predict(X_q)[0])
-    is_delayed = (primary_pct / 100.0) >= threshold
+    is_delayed = (primary_pct / 100.0) >= cal_cutoff
     est_delay_min = int(round(max(16.0, raw_min))) if is_delayed else int(round(max(0.0, raw_min)))
 
-    # 24-hour slot sweep to suggest optimal departure window
-    hr_frames = [
-        build_single_feature_vector(
-            bundle, origin, dest, carrier, fl_date, dt_time(h, dep_time_val.minute),
-            temp_f, dew_f, wind_kt, vis_mi, precip_in, pressure_mb,
-            traffic_mult=traffic_mult, prev_aircraft_delay=(0.0 if h < 9 else prev_delay),
-        )[0]
-        for h in range(24)
-    ]
-    probs_24h = np.round(
-        bundle["classifiers"]["XGBoost Classifier (Tuned)"].predict_proba(pd.concat(hr_frames, ignore_index=True))[:, 1] * 100.0,
-        1,
-    ).tolist()
-    best_hr = int(np.argmin(probs_24h))
+    # Compute 24-hour route-specific curve across actual operating flight hours
+    hr_frames = []
+    for h in range(24):
+        s_info = sched_slots.get(str(h))
+        s_min = int(s_info[0]) if s_info else dep_time_val.minute
+        # Realistic diurnal inbound aircraft lag progression across the day
+        typ_prev = 0.0 if h < 10 else (6.0 if h < 15 else 14.0)
+        if wx_stress_boost > 0 and prev_delay is not None and h >= 12:
+            typ_prev = max(typ_prev, prev_delay * 0.65)
+        hr_frames.append(
+            build_single_feature_vector(
+                bundle, origin, dest, carrier, fl_date, dt_time(h, s_min),
+                temp_f, dew_f, wind_kt, vis_mi, precip_in, pressure_mb,
+                traffic_mult=traffic_mult, prev_aircraft_delay=typ_prev,
+            )[0]
+        )
+
+    raw_24h = bundle["classifiers"]["XGBoost Classifier (Tuned)"].predict_proba(pd.concat(hr_frames, ignore_index=True))[:, 1]
+    cal_24h = (_calibrate_prob(raw_24h.astype(float), prior) * 100.0)
+
+    hourly_curve = []
+    active_hours = []
+    candidate_slots = []
+    for h in range(24):
+        s_info = sched_slots.get(str(h))
+        if s_info is not None:
+            s_min, emp_pct = int(s_info[0]), float(s_info[1])
+            # Blend live XGBoost weather/carrier response with actual BTS route-hour empirical delay rate
+            w_xgb = 0.72 if wx_stress_boost > 0 else 0.45
+            blended = round(w_xgb * float(cal_24h[h]) + (1.0 - w_xgb) * emp_pct, 1)
+            hourly_curve.append(blended)
+            active_hours.append(True)
+            candidate_slots.append((blended, h, s_min))
+        else:
+            hourly_curve.append(round(float(cal_24h[h]), 1))
+            active_hours.append(False)
+
+    if candidate_slots:
+        best_risk, best_hr, best_min = min(candidate_slots, key=lambda x: x[0])
+    else:
+        best_hr = int(np.argmin(cal_24h))
+        best_min = dep_time_val.minute
+        best_risk = round(float(cal_24h[best_hr]), 1)
 
     reasons = []
     if wind_kt >= 25.0:
@@ -183,7 +251,7 @@ async def api_predict(request: Request) -> JSONResponse:
     if dep_time_val.hour >= 17:
         reasons.append(f"Evening departure bank ({dep_time_val.strftime('%H:%M')}) faces cumulative network ripple")
     if not reasons:
-        reasons.append("Nominal surface weather and clear runway departure slot")
+        reasons.append(f"Clear surface weather and smooth {origin} departure bank")
 
     block_min = int(round(ctx["distance_mi"] / 7.5 + 35.0))
     return JSONResponse({
@@ -193,22 +261,16 @@ async def api_predict(request: Request) -> JSONResponse:
         "distance_mi": int(ctx["distance_mi"]),
         "block_time_str": f"{block_min // 60}h {block_min % 60:02d}m",
         "risk_pct": primary_pct,
-        "threshold_pct": round(threshold * 100.0, 0),
+        "threshold_pct": round(cal_cutoff * 100.0, 1),
         "is_delayed": is_delayed,
         "verdict": "DELAY EXPECTED" if is_delayed else "ON SCHEDULE",
         "est_delay_min": est_delay_min,
-        "model_probs": model_probs,
-        "hourly_curve": probs_24h,
-        "best_slot": f"{best_hr:02d}:{dep_time_val.minute:02d}",
-        "best_slot_risk_pct": probs_24h[best_hr],
+        "hourly_curve": hourly_curve,
+        "active_hours": active_hours,
+        "schedule_scope": schedule_scope,
+        "best_slot": f"{best_hr:02d}:{best_min:02d}",
+        "best_slot_risk_pct": best_risk,
         "reasons": reasons[:3],
-        "applied_weather": {
-            "temp_f": round(temp_f),
-            "dew_f": round(dew_f),
-            "wind_kt": round(wind_kt),
-            "vis_mi": round(vis_mi, 1),
-            "precip_in": round(precip_in, 2),
-        },
     })
 
 

@@ -585,12 +585,16 @@
       padding-top: 6px;
     }
     .spark-bar {
-      background: rgba(212, 255, 50, 0.28);
+      background: rgba(212, 255, 50, 0.34);
       border-radius: 2px 2px 0 0;
       min-height: 4px;
       transition: height 0.25s ease;
     }
-    .spark-bar.high { background: rgba(255, 107, 87, 0.65); }
+    .spark-bar.inactive {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .spark-bar.high { background: rgba(255, 107, 87, 0.70); }
+    .spark-bar.best { background: #34d399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.5); }
     .spark-bar.selected { outline: 1.5px solid #ffffff; background: var(--lime); }
 
     /* ---------------- SECONDARY VIEWS (HOW IT WORKS & MODEL INTELLIGENCE) ---------------- */
@@ -897,11 +901,11 @@
             <div id="reasons-box" class="reasons-list"></div>
 
             <div class="best-slot-box">
-              <span style="font-size: 13px; color: var(--muted);">Lowest-risk slot on this route</span>
-              <b id="best-slot-txt">06:15 (11% risk)</b>
+              <span id="best-slot-label" style="font-size: 13px; color: var(--muted);">Lowest-risk scheduled flight</span>
+              <b id="best-slot-txt">07:05 (8% risk)</b>
             </div>
 
-            <div class="big-num-label" style="margin-bottom: 4px;">24-Hour Route Risk Profile (00:00 → 23:00)</div>
+            <div class="big-num-label" style="margin-bottom: 4px;">24-Hour Scheduled Route Profile (Dim = No Scheduled Flights)</div>
             <div id="spark-container" class="spark-bars"></div>
           </div>
         </div>
@@ -1136,13 +1140,23 @@
       document.getElementById('reasons-box').innerHTML =
         r.reasons.map(msg => `<div class="reason-item">${msg}</div>`).join('');
 
+      document.getElementById('best-slot-label').textContent =
+        `Lowest-risk slot (${r.schedule_scope})`;
       document.getElementById('best-slot-txt').textContent =
         `${r.best_slot} (${Math.round(r.best_slot_risk_pct)}% risk)`;
 
       const selHr = parseInt(dep_time.split(':')[0] || '0', 10);
+      const bestHr = parseInt(r.best_slot.split(':')[0] || '0', 10);
       document.getElementById('spark-container').innerHTML = r.hourly_curve.map((val, h) => {
-        const cls = (h === selHr ? 'selected ' : '') + (val >= r.threshold_pct ? 'high' : '');
-        const heightPct = Math.max(10, Math.round(val));
+        const isActive = r.active_hours ? r.active_hours[h] : true;
+        if (!isActive) {
+          return `<div class="spark-bar inactive" style="height:14%" title="${String(h).padStart(2,'0')}:00 — No scheduled flights on this route"></div>`;
+        }
+        let cls = '';
+        if (h === selHr) cls = 'selected';
+        else if (h === bestHr) cls = 'best';
+        else if (val >= r.threshold_pct) cls = 'high';
+        const heightPct = Math.min(100, Math.max(14, Math.round(val * 1.3)));
         return `<div class="spark-bar ${cls}" style="height:${heightPct}%" title="${String(h).padStart(2,'0')}:00 — ${val}% risk"></div>`;
       }).join('');
     }
